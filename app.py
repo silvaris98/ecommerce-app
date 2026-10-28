@@ -2,6 +2,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
+from urllib.parse import urlparse
 import json
 
 EXTERNAL_API = "https://dummyjson.com/products?limit=10"
@@ -13,18 +14,26 @@ class EcommerceHandler(BaseHTTPRequestHandler):
         data = json.dumps(body).encode("utf-8")
 
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header(
+            "Content-Type",
+            "application/json; charset=utf-8"
+        )
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
 
         self.wfile.write(data)
 
     def do_GET(self):
-        if self.path == "/health":
-            self.send_json(200, {"status": "healthy"})
+        # Ignore query parameters when matching endpoints
+        path = urlparse(self.path).path
+
+        if path == "/health":
+            self.send_json(200, {
+                "status": "healthy"
+            })
             return
 
-        if self.path == "/api/products":
+        if path == "/api/products":
             try:
                 request = Request(
                     EXTERNAL_API,
@@ -55,8 +64,13 @@ class EcommerceHandler(BaseHTTPRequestHandler):
                     "products": products
                 })
 
-            except (HTTPError, URLError, TimeoutError,
-                    ValueError, KeyError) as error:
+            except (
+                HTTPError,
+                URLError,
+                TimeoutError,
+                ValueError,
+                KeyError
+            ) as error:
                 self.send_json(502, {
                     "error": "External products API unavailable",
                     "detail": str(error)
@@ -64,7 +78,7 @@ class EcommerceHandler(BaseHTTPRequestHandler):
 
             return
 
-        if self.path == "/":
+        if path == "/":
             self.send_json(200, {
                 "app": "Sample E-commerce Store",
                 "message": "Welcome to our online store!",
@@ -78,7 +92,7 @@ class EcommerceHandler(BaseHTTPRequestHandler):
 
         self.send_json(404, {
             "error": "Not found",
-            "path": self.path
+            "path": path
         })
 
     def log_message(self, format, *args):
@@ -99,5 +113,9 @@ if __name__ == "__main__":
         EcommerceHandler
     )
 
-    print("E-commerce server running on port 8000", flush=True)
+    print(
+        "E-commerce server running on port 8000",
+        flush=True
+    )
+
     server.serve_forever()
