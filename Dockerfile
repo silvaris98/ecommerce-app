@@ -1,6 +1,8 @@
 FROM python:3.12-alpine
 
-RUN adduser -D appuser
+RUN adduser -D appuser \
+    && mkdir -p /data \
+    && chown appuser:appuser /data
 
 WORKDIR /app
 
