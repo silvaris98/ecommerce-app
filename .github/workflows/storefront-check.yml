@@ -1,0 +1,68 @@
+name: Storefront branch checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/storefront-frontend]
+
+permissions:
+  contents: read
+
+jobs:
+  storefront-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Check required files
+        run: |
+          test -s app.py
+          test -s Dockerfile
+          test -s static/index.html
+
+      - name: Validate embedded JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("static/index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script>(.*?)</script>", html, re.S)
+          assert scripts, "No inline JavaScript block found"
+          Path("/tmp/storefront.js").write_text("\n".join(scripts), encoding="utf-8")
+          PY
+          node --check /tmp/storefront.js
+
+      - name: Build Docker image
+        run: docker build -t ecommerce-storefront:test .
+
+      - name: Run container and verify homepage and health
+        run: |
+          docker volume create storefront-test-data
+          docker run -d --name storefront-test \
+            -p 127.0.0.1:18000:8000 \
+            -v storefront-test-data:/data \
+            ecommerce-storefront:test
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18000/health >/tmp/health.json; then break; fi
+            sleep 2
+          done
+          grep -q '"status": "healthy"' /tmp/health.json
+          grep -q '"database": "connected"' /tmp/health.json
+          curl -fsS http://127.0.0.1:18000/ | grep -q 'Good things'
+          curl -fsS http://127.0.0.1:18000/ | grep -q 'Your recent orders'
+
+      - name: Verify order creation and persistence
+        run: |
+          response=$(curl -fsS -X POST http://127.0.0.1:18000/api/orders \
+            -H 'Content-Type: application/json' \
+            -d '{"customer_name":"CI Test","product_name":"Test Product","quantity":2}')
+          echo "$response" | grep -q '"message": "Order saved"'
+          curl -fsS http://127.0.0.1:18000/api/orders | grep -q '"customer_name": "CI Test"'
+
+      - name: Cleanup test container
+        if: always()
+        run: |
+          docker rm -f storefront-test 2>/dev/null || true
+          docker volume rm storefront-test-data 2>/dev/null || true

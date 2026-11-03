@@ -7,6 +7,7 @@ RUN adduser -D appuser \
 WORKDIR /app
 
 COPY --chown=appuser:appuser app.py .
+COPY --chown=appuser:appuser static ./static
 
 USER appuser
 

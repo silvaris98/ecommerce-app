@@ -107,13 +107,22 @@ class EcommerceHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/":
-            self.send_json(200, {
-                "app": "Sample E-commerce Store",
-                "message": "Welcome to our online store!",
-                "endpoints": [
-                    "/", "/health", "/api/products", "/api/orders"
-                ]
-            })
+            try:
+                index_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "static",
+                    "index.html"
+                )
+                with open(index_path, "rb") as index_file:
+                    page = index_file.read()
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(page)))
+                self.end_headers()
+                self.wfile.write(page)
+            except OSError:
+                self.send_json(500, {"error": "Storefront is unavailable"})
             return
 
         self.send_json(404, {"error": "Not found", "path": path})
